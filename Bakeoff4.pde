@@ -4,6 +4,7 @@ import ketai.sensors.*;
 
 KetaiSensor sensor;
 
+
 float cursorX, cursorY;
 float light = 0;
 
@@ -31,11 +32,21 @@ int targetHeight;
   
   int countDownTimerWait = 0;
   
+  //Compass stuff
+  PVector magneticField, accelerometer;
+  float azimuth, pitch, roll;
+  float[] matrixR = new float[9];
+  float[] matrixI = new float[9];
+  float[] matrixValues = new float[9];
+  
   void setup() {
     fullScreen();
     frameRate(60);
     sensor = new KetaiSensor(this);
     sensor.start();
+    sensor.list();
+    magneticField = new PVector();
+    accelerometer = new PVector();
     orientation(PORTRAIT);
   
     rectMode(CENTER);
@@ -110,31 +121,61 @@ void draw() {
        text("DOWN", width/2, 150);
   }
   
-void onAccelerometerEvent(float x, float y, float z)
+void calculateOrientation()
 {
+  try {
+    boolean success = android.hardware.SensorManager.getRotationMatrix(
+    matrixR, 
+    matrixI, 
+    accelerometer.array(), 
+    magneticField.array());
+
+    if (success) {
+      android.hardware.SensorManager.getOrientation(matrixR, matrixValues);
+
+      azimuth = matrixValues[0];
+      pitch = matrixValues[1];
+      roll = matrixValues[2];
+    }
+  }
+  catch (Exception e) { 
+    println("Error: " + e);
+  }
+}
+
+void onAccelerometerEvent(float x, float y, float z, long time, int accuracy)
+{
+  accelerometer.set(x, y, z);
+  calculateOrientation();
+}
+
+void onMagneticFieldEvent(float x, float y, float z, long time, int accuracy)
+{
+  magneticField.set(x, y, z);
   print(trialIndex);
   if (userDone) 
     return;
     
   if (light>lightThreshold) //only update cursor, if light is low
   {
-    cursorX = width/2 - x*100; //cented to window and scaled
-    cursorY = height/2  + y*100; //cented to window and scaled
+
+    //cursorX = width/2 - x*100; //cented to window and scaled
+    cursorX = width/2 * cos(azimuth) - height/4 * sin(azimuth);
+    //cursorY = height/4  + y*100; //cented to window and scaled
+    cursorY = height/4 * cos(azimuth) + width/2 * sin(azimuth);
     
     if (cursorX < 0) cursorX = 0;
     if (cursorY < 0) cursorY = 0;
     if (cursorX > width) cursorX = width;
     if (cursorY > height) cursorY = height;
   }
-  
   Target t = targets.get(trialIndex);
-  if (light<=lightThreshold && abs(z-9.8)>4 && countDownTimerWait<0) //possible hit event
+  if (light<=lightThreshold && countDownTimerWait<0) //possible hit event
   {
    
     if (hitTest()==t.target)//check if it is the right target
     {
-      print(z-9.8);
-      if (((z-9.8)>4 && t.action==0) || ((z-9.8)<-4 && t.action==1))
+      if ((t.action==0) || (t.action==1))
       {
         println("Right target, right z direction! " + hitTest());
         trialIndex++; //next trial!
