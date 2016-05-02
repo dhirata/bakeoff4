@@ -4,6 +4,15 @@ import ketai.sensors.*;
 
 KetaiSensor sensor;
 
+PVector magneticField, accelerometer;
+float azimuth, pitch, roll;
+
+float[] matrixR = new float[9];
+float[] matrixI = new float[9];
+float[] matrixValues = new float[9];
+PImage img1;
+PImage img2;
+
 float cursorX, cursorY;
 float light = 0;
 
@@ -17,6 +26,7 @@ int targetHeight;
     int action = 0;
   }
 
+  
   int trialCount = 5; //this will be set higher for the bakeoff
   int trialIndex = 0;
   boolean trialsComplete = false;
@@ -30,12 +40,17 @@ int targetHeight;
   int stage = 0; //stage 0 = select one of 4, stage 1 = select one of 2
   
   int countDownTimerWait = 0;
-  
+    
   void setup() {
     fullScreen();
+    img1 = loadImage("CW-01.jpeg");
+    img2 = loadImage("CCW-02.jpeg");
     frameRate(60);
     sensor = new KetaiSensor(this);
     sensor.start();
+    sensor.list();
+    accelerometer = new PVector();
+    magneticField = new PVector();
     orientation(PORTRAIT);
   
     rectMode(CENTER);
@@ -105,13 +120,16 @@ void draw() {
     text("Target #" + (targets.get(trialIndex).target)+1, width/2, 100);
     
     if (targets.get(trialIndex).action==0)
-      text("UP", width/2, 150);
+      image(img2, width/2, 150);
     else
-       text("DOWN", width/2, 150);
+       image(img1, width/2, 150);
   }
   
 void onAccelerometerEvent(float x, float y, float z)
 {
+  accelerometer.set(x, y, z);
+  
+  calculateOrientation();
   print(trialIndex);
   if (userDone) 
     return;
@@ -130,11 +148,13 @@ void onAccelerometerEvent(float x, float y, float z)
   Target t = targets.get(trialIndex);
   if (light<=lightThreshold && abs(z-9.8)>4 && countDownTimerWait<0) //possible hit event
   {
-   
+    float temp = new Float( -azimuth * 360 / (2 * 3.14159f)); 
     if (hitTest()==t.target)//check if it is the right target
     {
-      print(z-9.8);
-      if (((z-9.8)>4 && t.action==0) || ((z-9.8)<-4 && t.action==1))
+      float rotation = -azimuth * 360 / (2 * 3.14159f);
+      print (rotation);
+      print (temp);
+      if ((temp < rotation || -temp > rotation && t.action==0) || ((temp > rotation || -temp < rotation) && t.action==1))
       {
         println("Right target, right z direction! " + hitTest());
         trialIndex++; //next trial!
@@ -150,6 +170,33 @@ void onAccelerometerEvent(float x, float y, float z)
     }
     else
       println("Missed target! " + hitTest()); //no recording errors this bakeoff.
+  }
+}
+
+void onMagneticFieldEvent(float x, float y, float z, long time, int accuracy)
+{
+  magneticField.set(x, y, z);
+}
+
+void calculateOrientation()
+{
+  try {
+    boolean success = android.hardware.SensorManager.getRotationMatrix(
+    matrixR, 
+    matrixI, 
+    accelerometer.array(), 
+    magneticField.array());
+
+    if (success) {
+      android.hardware.SensorManager.getOrientation(matrixR, matrixValues);
+
+      azimuth = matrixValues[0];
+      pitch = matrixValues[1];
+      roll = matrixValues[2];
+    }
+  }
+  catch (Exception e) { 
+    println("Error: " + e);
   }
 }
 
